@@ -4,6 +4,7 @@
 #include "os/directory.h"
 #include "os/buffer.h"
 #include "os/console.h"
+#include "os/editor.h"
 
 using namespace std;
 
@@ -20,14 +21,14 @@ private:
 	//     CPU 
 	// * UI
 	//     text editor
-    //     directories
 	//     terminal
+	//     buffer focus
 	// * File- and program management
 	// * Hardware communication
+	string current_dir = "/";
+
 	vector<Directory*> directories;
 	vector<File*> files;
-
-	Buffer* buffer = new Buffer(128, 128, 256, 256, "test buffer");
 
 	engine::Sprite* file_sprite = new engine::Sprite("file.png");
 	engine::Sprite* dir_sprite = new engine::Sprite("folder.png");
@@ -37,6 +38,7 @@ private:
 	int const TEXT_HEIGHT = 8;
 
 	Console console{};
+	Editor* editor = nullptr;
 
 	void draw_file(File* f, int x, int y) {
 		draw_sprite(x, y, file_sprite, 1, 0);
@@ -49,43 +51,61 @@ private:
 	}
 
 	void draw_buffer(Buffer* buffer) {
-		gradient_fill_rect_decal({(float)buffer->x_pos, (float)buffer->y_pos}, {(float)buffer->width, (float)buffer->height}, engine::pixel_float(0, 0, 0.5f, 0.5f), engine::pixel_float(0, 0, 0.25f, 0.5f), engine::pixel_float(0, 0, 0.25f, 0.5f), engine::pixel_float(0, 0, 0.25f, 0.5f));
+		gradient_fill_rect_decal({(float)buffer->x_pos, (float)buffer->y_pos}, {(float)buffer->width, (float)buffer->height}, buffer->color1, buffer->color2, buffer->color3, buffer->color4);
 		draw_rect_decal({(float)buffer->x_pos, (float)buffer->y_pos}, {(float)buffer->width, (float)buffer->height}, engine::BLACK);
 
 		if(buffer->has_title) {
-			draw_string_decal({(float)(buffer->x_pos+TEXT_HEIGHT/2), (float)(buffer->y_pos+TEXT_HEIGHT/2)}, /*buffer->title*/console.text_entry_string, engine::WHITE, { 1.0f, 1.0f });
+			draw_string_decal({(float)(buffer->x_pos+TEXT_HEIGHT/2), (float)(buffer->y_pos-TEXT_HEIGHT)}, buffer->title, engine::WHITE, { 1.0f, 1.0f });
 		}
-		fill_rect_decal(engine::float_vector_2d(buffer->x_pos+TEXT_HEIGHT/2 + float((console.text_entry_cursor))*8.0f, buffer->y_pos+TEXT_HEIGHT/2), engine::float_vector_2d(8, 8), engine::BLACK);
+
+		if(buffer->has_cursor) {
+			fill_rect_decal(engine::float_vector_2d(buffer->x_pos+TEXT_HEIGHT/2 + (float)(buffer->cursor.x_pos)*8.0f, buffer->y_pos+TEXT_HEIGHT/2 + (float)(buffer->cursor.y_pos)*8.0f), engine::float_vector_2d(8, 8), engine::BLACK);
+		}
 	}
 
+	void draw_buffer_entry(Buffer* buffer, string entry) {
+		draw_buffer(buffer);
+		draw_string_decal({(float)(buffer->x_pos+TEXT_HEIGHT/2), (float)(buffer->y_pos+TEXT_HEIGHT/2)}, entry, engine::WHITE, { 1.0f, 1.0f });
+	}
+
+	void draw_editor(Editor* editor) {
+		draw_buffer(&editor->buffer);
+		int index = 0;
+		for(string line : editor->file->content) {
+			draw_string_decal({(float)(editor->buffer.x_pos+TEXT_HEIGHT/2), (float)(editor->buffer.y_pos+TEXT_HEIGHT/2) + TEXT_HEIGHT*index}, line, engine::WHITE, { 1.0f, 1.0f });
+			index++;
+		}
+	}
+
+	// TODO: Refactor
 	void update_entry(Console& console) {
 		if (console.showing && console.enable_text_entry) {
             for (const auto& key : keyboard)
                 if (get_key(std::get<0>(key)).pressed) {
-                    console.text_entry_string.insert(console.text_entry_cursor, get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
-					console.text_entry_cursor++;
+                    console.text_entry_string.insert(console.buffer.cursor.x_pos, get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
+					console.buffer.cursor.x_pos++;
 				}
             
             if (get_key(engine::Key::ENTER).pressed) {
                 std::cout << ">" + console.text_entry_string + "\n";
 				console.history.push_back(console.text_entry_string);
                 console.text_entry_string.clear();
-				console.text_entry_cursor = 0;
+				console.buffer.cursor.x_pos = 0;
             }
 
 			if (get_key(engine::Key::LEFT).pressed)
-				console.text_entry_cursor = std::max(0, console.text_entry_cursor - 1);
+				console.buffer.cursor.x_pos = std::max(0, console.buffer.cursor.x_pos - 1);
 			
 			if (get_key(engine::Key::RIGHT).pressed)
-				console.text_entry_cursor = std::min(int(console.text_entry_string.size()), console.text_entry_cursor + 1);
+				console.buffer.cursor.x_pos = std::min(int(console.text_entry_string.size()), console.buffer.cursor.x_pos + 1);
 			
-			if (get_key(engine::Key::BACK).pressed && console.text_entry_cursor > 0) {
-				console.text_entry_string.erase(console.text_entry_cursor-1, 1);
-				console.text_entry_cursor = std::max(0, console.text_entry_cursor - 1);
+			if (get_key(engine::Key::BACK).pressed && console.buffer.cursor.x_pos > 0) {
+				console.text_entry_string.erase(console.buffer.cursor.x_pos-1, 1);
+				console.buffer.cursor.x_pos = std::max(0, console.buffer.cursor.x_pos - 1);
 			}
 
-			if (get_key(engine::Key::DEL).pressed && console.text_entry_cursor < console.text_entry_string.size())
-				console.text_entry_string.erase(console.text_entry_cursor, 1);
+			if (get_key(engine::Key::DEL).pressed && console.buffer.cursor.x_pos < console.text_entry_string.size())
+				console.text_entry_string.erase(console.buffer.cursor.x_pos, 1);
         }
     }
 
@@ -100,7 +120,7 @@ private:
 
 		if(cmd[0] == "create") {
 			if(cmd[1] == "dir") {
-				directories.push_back(new Directory(cmd[2], "/"));
+				directories.push_back(new Directory(cmd[2], current_dir));
 			}
 			else if(cmd[1] == "file") {
 				files.push_back(new File(cmd[2], cmd[3]));
@@ -108,10 +128,30 @@ private:
 		}
 		else if(cmd[0] == "open") {
 			if(cmd[1] == "dir") {
-
+				current_dir += cmd[2] + "/";
 			}
 			else if(cmd[1] == "file") {
-				
+				for(File* f : files) {
+					if(f->name == cmd[2]) {
+						f->is_open = true;
+						break;
+					}
+				}
+			}
+		}
+		else if(cmd[0] == "close") {
+			if(cmd[1] == "file") {
+				for(File* f : files) {
+					if(f->name == cmd[2]) {
+						f->is_open = false;
+						break;
+					}
+				}
+			}
+		}
+		else if(cmd[0] == "goto") {
+			if(cmd[1] == "home") {
+				current_dir = "/";
 			}
 		}
 	}
@@ -123,14 +163,17 @@ public:
 		File* file = new File("text_file", "txt");
 		files.push_back(file);
 
+		editor = new Editor(file);
+
 		console.show();
 		return true;
 	}
 
 	bool on_update(float elapsed_time) override {
 		fill_rect(0, 0, screen_width(), screen_height(), engine::DARK_GREY);
+		draw_string(4, 4, current_dir, engine::BLACK);
 
-		draw_buffer(buffer);
+		draw_buffer_entry(&console.buffer, console.text_entry_string);
 		update_entry(console);
 
 		if(get_key(engine::Key::ENTER).pressed) {
@@ -139,12 +182,18 @@ public:
 
 		int offset = 0;
 		for(Directory* d : directories) {
-			draw_folder(d, 4, offset+ICON_HEIGHT);
-			offset+=ICON_HEIGHT;
+			if(d->location == current_dir) {
+				draw_folder(d, 4, offset+ICON_HEIGHT);
+				offset+=ICON_HEIGHT;
+			}
 		}
+
 		for(File* f : files) {
 			draw_file(f, 4, offset+ICON_HEIGHT);
 			offset+=ICON_HEIGHT;
+			if(f->is_open) {
+				draw_editor(editor);
+			}
 		}
 
 		return true;

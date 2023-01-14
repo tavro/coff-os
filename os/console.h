@@ -3,6 +3,8 @@
 
 class Console {
 public:
+    Buffer buffer{128, 128, 256, 256, "Terminal", true};
+
     bool showing;
     bool enable_text_entry;
     
