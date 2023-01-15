@@ -22,9 +22,14 @@ private:
 	// * UI
 	//     text editor
 	//     terminal
+	//          response messages
 	//     buffer focus
 	// * File- and program management
 	// * Hardware communication
+	Buffer* focused_buffer;
+	vector<Buffer*> opened_buffers;
+	int buffer_index = 0;
+
 	string current_dir = "/";
 
 	vector<Directory*> directories;
@@ -109,6 +114,34 @@ private:
         }
     }
 
+	void update_editor_entry(Editor* editor) {
+		for (const auto& key : keyboard)
+                if (get_key(std::get<0>(key)).pressed) {
+                    editor->file->content[editor->active_line].insert(editor->buffer.cursor.x_pos, get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
+					editor->buffer.cursor.x_pos++;
+				}
+
+		if (get_key(engine::Key::LEFT).pressed)
+			editor->decrease_cursor_x();
+			
+		if (get_key(engine::Key::RIGHT).pressed)
+			editor->increase_cursor_x();
+
+		if(get_key(engine::Key::UP).pressed)
+			editor->decrease_active_line();
+
+		if(get_key(engine::Key::DOWN).pressed)
+			editor->increase_active_line();
+
+		if (get_key(engine::Key::BACK).pressed && editor->buffer.cursor.x_pos > 0) {
+			editor->file->content[editor->active_line].erase(editor->buffer.cursor.x_pos-1, 1);
+			editor->buffer.cursor.x_pos = std::max(0, editor->buffer.cursor.x_pos - 1);
+		}
+
+		if (get_key(engine::Key::DEL).pressed && editor->buffer.cursor.x_pos < editor->file->content[editor->active_line].size())
+			editor->file->content[editor->active_line].erase(editor->buffer.cursor.x_pos, 1);
+	}
+
 	void run_cmd(string str) {
 		istringstream ss(str);
     	
@@ -134,17 +167,34 @@ private:
 				for(File* f : files) {
 					if(f->name == cmd[2]) {
 						f->is_open = true;
+						focused_buffer = &editor->buffer;
+						opened_buffers.push_back(&editor->buffer);
 						break;
 					}
 				}
 			}
 		}
 		else if(cmd[0] == "close") {
-			if(cmd[1] == "file") {
+			if(cmd[1] == "dir") {
+				if(current_dir != "/") {
+					// TODO: Remove part of substring
+				}
+			}
+			else if(cmd[1] == "file") {
 				for(File* f : files) {
 					if(f->name == cmd[2]) {
-						f->is_open = false;
-						break;
+						if(f->is_open) {
+							f->is_open = false;
+
+							/*
+							for(Buffer* b : opened_buffers)
+								if(b == &editor->buffer)
+									// TODO: Remove buffer
+							*/
+
+							focused_buffer = &console.buffer;
+							break;
+						}
 					}
 				}
 			}
@@ -166,15 +216,27 @@ public:
 		editor = new Editor(file);
 
 		console.show();
+		focused_buffer = &console.buffer;
+		opened_buffers.push_back(&console.buffer);
 		return true;
 	}
 
 	bool on_update(float elapsed_time) override {
+		if(get_key(engine::Key::TAB).pressed) {
+			if(buffer_index < opened_buffers.size()-1)
+				buffer_index++;
+			else {
+				buffer_index = 0;
+			}
+			focused_buffer = opened_buffers[buffer_index];
+		}
+
 		fill_rect(0, 0, screen_width(), screen_height(), engine::DARK_GREY);
 		draw_string(4, 4, current_dir, engine::BLACK);
 
 		draw_buffer_entry(&console.buffer, console.text_entry_string);
-		update_entry(console);
+		if(focused_buffer == &console.buffer)
+			update_entry(console);
 
 		if(get_key(engine::Key::ENTER).pressed) {
 			run_cmd(console.history[console.history.size()-1]);
@@ -193,6 +255,8 @@ public:
 			offset+=ICON_HEIGHT;
 			if(f->is_open) {
 				draw_editor(editor);
+				if(focused_buffer == &editor->buffer)
+					update_editor_entry(editor);
 			}
 		}
 

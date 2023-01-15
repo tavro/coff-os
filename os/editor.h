@@ -11,13 +11,17 @@ public:
     }
 
     void increase_active_line() {
-        if(active_line < lines)
+        if(active_line < lines) {
+            buffer.cursor.y_pos++;
             active_line++;
+        }
     }
 
     void decrease_active_line() {
-        if(active_line > 0)
+        if(active_line > 0) {
+            buffer.cursor.y_pos--;
             active_line--;
+        }
     }
 
     void increase_cursor_x() {
@@ -50,5 +54,6 @@ public:
         file->content.push_back("this is second line of file");
         file->content.push_back("this is third line of file");
         buffer.cursor.x_pos = 0;
+        lines = file->content.size()-1;
     }
 };
