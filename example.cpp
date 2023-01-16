@@ -5,6 +5,7 @@
 #include "os/buffer.h"
 #include "os/console.h"
 #include "os/editor.h"
+#include "os/utilities/str_handler.h"
 
 using namespace std;
 
@@ -44,6 +45,10 @@ private:
 
 	Console console{};
 	Editor* editor = nullptr;
+
+	void report_cmd_error(string reason) {
+		cout << "terminal error: " + reason << endl;
+	}
 
 	void draw_file(File* f, int x, int y) {
 		draw_sprite(x, y, file_sprite, 1, 0);
@@ -161,7 +166,9 @@ private:
 		}
 		else if(cmd[0] == "open") {
 			if(cmd[1] == "dir") {
-				current_dir += cmd[2] + "/";
+				for(Directory* dir : directories)
+					if(dir->name == cmd[2])
+						current_dir += cmd[2] + "/";
 			}
 			else if(cmd[1] == "file") {
 				for(File* f : files) {
@@ -177,7 +184,7 @@ private:
 		else if(cmd[0] == "close") {
 			if(cmd[1] == "dir") {
 				if(current_dir != "/") {
-					// TODO: Remove part of substring
+					remove_last_substring(current_dir);
 				}
 			}
 			else if(cmd[1] == "file") {
@@ -199,10 +206,8 @@ private:
 				}
 			}
 		}
-		else if(cmd[0] == "goto") {
-			if(cmd[1] == "home") {
-				current_dir = "/";
-			}
+		else {
+			report_cmd_error("invalid command");
 		}
 	}
 public:
