@@ -2,10 +2,11 @@
 #include "engine.h"
 #include "os/file.h"
 #include "os/directory.h"
-#include "os/buffer.h"
+#include "os/graphics/buffer.h"
 #include "os/console.h"
 #include "os/editor.h"
 #include "os/utilities/str_handler.h"
+#include "os/terminal/terminal.h"
 
 using namespace std;
 
@@ -43,12 +44,9 @@ private:
 	int const ICON_HEIGHT = 16;
 	int const TEXT_HEIGHT = 8;
 
+	Terminal* terminal;
 	Console console{};
 	Editor* editor = nullptr;
-
-	void report_cmd_error(string reason) {
-		cout << "terminal error: " + reason << endl;
-	}
 
 	void draw_file(File* f, int x, int y) {
 		draw_sprite(x, y, file_sprite, 1, 0);
@@ -69,7 +67,7 @@ private:
 		}
 
 		if(buffer->has_cursor) {
-			fill_rect_decal(engine::float_vector_2d(buffer->x_pos+TEXT_HEIGHT/2 + (float)(buffer->cursor.x_pos)*8.0f, buffer->y_pos+TEXT_HEIGHT/2 + (float)(buffer->cursor.y_pos)*8.0f), engine::float_vector_2d(8, 8), engine::BLACK);
+			fill_rect_decal(engine::float_vector_2d(buffer->x_pos+TEXT_HEIGHT/2 + (float)(buffer->cursor.get_x())*8.0f, buffer->y_pos+TEXT_HEIGHT/2 + (float)(buffer->cursor.get_y())*8.0f), engine::float_vector_2d(8, 8), engine::BLACK);
 		}
 	}
 
@@ -92,38 +90,38 @@ private:
 		if (console.showing && console.enable_text_entry) {
             for (const auto& key : keyboard)
                 if (get_key(std::get<0>(key)).pressed) {
-                    console.text_entry_string.insert(console.buffer.cursor.x_pos, get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
-					console.buffer.cursor.x_pos++;
+                    console.text_entry_string.insert(console.buffer.cursor.get_x(), get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
+					console.buffer.cursor.increase_x();
 				}
             
             if (get_key(engine::Key::ENTER).pressed) {
                 std::cout << ">" + console.text_entry_string + "\n";
 				console.history.push_back(console.text_entry_string);
                 console.text_entry_string.clear();
-				console.buffer.cursor.x_pos = 0;
+				console.buffer.cursor.set_x(0);
             }
 
 			if (get_key(engine::Key::LEFT).pressed)
-				console.buffer.cursor.x_pos = std::max(0, console.buffer.cursor.x_pos - 1);
+				console.buffer.cursor.set_x(std::max(0, console.buffer.cursor.get_x() - 1));
 			
 			if (get_key(engine::Key::RIGHT).pressed)
-				console.buffer.cursor.x_pos = std::min(int(console.text_entry_string.size()), console.buffer.cursor.x_pos + 1);
+				console.buffer.cursor.set_x(std::min(int(console.text_entry_string.size()), console.buffer.cursor.get_x() + 1));
 			
-			if (get_key(engine::Key::BACK).pressed && console.buffer.cursor.x_pos > 0) {
-				console.text_entry_string.erase(console.buffer.cursor.x_pos-1, 1);
-				console.buffer.cursor.x_pos = std::max(0, console.buffer.cursor.x_pos - 1);
+			if (get_key(engine::Key::BACK).pressed && console.buffer.cursor.get_x() > 0) {
+				console.text_entry_string.erase(console.buffer.cursor.get_x()-1, 1);
+				console.buffer.cursor.set_x(std::max(0, console.buffer.cursor.get_x() - 1));
 			}
 
-			if (get_key(engine::Key::DEL).pressed && console.buffer.cursor.x_pos < console.text_entry_string.size())
-				console.text_entry_string.erase(console.buffer.cursor.x_pos, 1);
+			if (get_key(engine::Key::DEL).pressed && console.buffer.cursor.get_x() < console.text_entry_string.size())
+				console.text_entry_string.erase(console.buffer.cursor.get_x(), 1);
         }
     }
 
 	void update_editor_entry(Editor* editor) {
 		for (const auto& key : keyboard)
                 if (get_key(std::get<0>(key)).pressed) {
-                    editor->file->content[editor->active_line].insert(editor->buffer.cursor.x_pos, get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
-					editor->buffer.cursor.x_pos++;
+                    editor->file->content[editor->active_line].insert(editor->buffer.cursor.get_x(), get_key(engine::Key::SHIFT).held ? std::get<2>(key) : std::get<1>(key));
+					editor->buffer.cursor.increase_x();
 				}
 
 		if (get_key(engine::Key::LEFT).pressed)
@@ -138,13 +136,18 @@ private:
 		if(get_key(engine::Key::DOWN).pressed)
 			editor->increase_active_line();
 
-		if (get_key(engine::Key::BACK).pressed && editor->buffer.cursor.x_pos > 0) {
-			editor->file->content[editor->active_line].erase(editor->buffer.cursor.x_pos-1, 1);
-			editor->buffer.cursor.x_pos = std::max(0, editor->buffer.cursor.x_pos - 1);
+		if (get_key(engine::Key::BACK).pressed && editor->buffer.cursor.get_x() > 0) {
+			editor->file->content[editor->active_line].erase(editor->buffer.cursor.get_x()-1, 1);
+			editor->buffer.cursor.set_x(std::max(0, editor->buffer.cursor.get_x() - 1));
 		}
 
-		if (get_key(engine::Key::DEL).pressed && editor->buffer.cursor.x_pos < editor->file->content[editor->active_line].size())
-			editor->file->content[editor->active_line].erase(editor->buffer.cursor.x_pos, 1);
+		if (get_key(engine::Key::DEL).pressed && editor->buffer.cursor.get_x() < editor->file->content[editor->active_line].size())
+			editor->file->content[editor->active_line].erase(editor->buffer.cursor.get_x(), 1);
+	}
+
+	/*
+	void report_error(string reason) {
+		cout << "terminal error: " + reason << endl;
 	}
 
 	void run_cmd(string str) {
@@ -193,11 +196,9 @@ private:
 						if(f->is_open) {
 							f->is_open = false;
 
-							/*
 							for(Buffer* b : opened_buffers)
 								if(b == &editor->buffer)
 									// TODO: Remove buffer
-							*/
 
 							focused_buffer = &console.buffer;
 							break;
@@ -207,11 +208,14 @@ private:
 			}
 		}
 		else {
-			report_cmd_error("invalid command");
+			report_error("invalid command");
 		}
 	}
+	*/
 public:
 	bool on_create() override {
+		terminal = new Terminal();
+
 		Directory* dir = new Directory("folder", "/");
 		directories.push_back(dir);
 
@@ -244,7 +248,8 @@ public:
 			update_entry(console);
 
 		if(get_key(engine::Key::ENTER).pressed) {
-			run_cmd(console.history[console.history.size()-1]);
+			Terminal* t = new Terminal();
+			t->run_cmd(console.history[console.history.size()-1]);
 		}
 
 		int offset = 0;

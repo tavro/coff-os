@@ -12,38 +12,38 @@ public:
 
     void increase_active_line() {
         if(active_line < lines) {
-            buffer.cursor.y_pos++;
+            buffer.cursor.increase_y();
             active_line++;
         }
     }
 
     void decrease_active_line() {
         if(active_line > 0) {
-            buffer.cursor.y_pos--;
+            buffer.cursor.decrease_y();
             active_line--;
         }
     }
 
     void increase_cursor_x() {
-        if(buffer.cursor.x_pos < file->content[active_line].size()-1) {
-            buffer.cursor.x_pos++;
+        if(buffer.cursor.get_x() < file->content[active_line].size()-1) {
+            buffer.cursor.increase_x();
         }
         else {
             if(active_line < lines) {
                 increase_active_line();
-                buffer.cursor.x_pos = 0;
+                buffer.cursor.set_x(0);
             }
         }
     }
 
     void decrease_cursor_x() {
-        if(buffer.cursor.x_pos > 0) {
-            buffer.cursor.x_pos--;
+        if(buffer.cursor.get_x() > 0) {
+            buffer.cursor.decrease_x();
         }
         else {
             if(active_line > 0) {
                 decrease_active_line();
-                buffer.cursor.x_pos = file->content[active_line].size()-1;
+                buffer.cursor.set_x(file->content[active_line].size()-1);
             }
         }
     }
@@ -53,7 +53,7 @@ public:
         file->content.push_back("this is first line of file");
         file->content.push_back("this is second line of file");
         file->content.push_back("this is third line of file");
-        buffer.cursor.x_pos = 0;
+        buffer.cursor.set_x(0);
         lines = file->content.size()-1;
     }
 };
