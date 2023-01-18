@@ -27,12 +27,31 @@ public:
         
     }
 
-    void report_error(std::string code) {
-		std::cout << "terminal error: " + code << std::endl;
-	}
+    std::string get_standing_dir() {
+        return standing_dir;
+    }
 
-    void run_cmd(std::string str) {
-		std::istringstream ss(str);
+    void add_char_to_entry(std::string c) {
+        text_entry_string.insert(buffer.cursor.get_x(), c);
+        buffer.cursor.increase_x();
+    }
+
+    void print_text_entry() {
+        std::cout << ">" + text_entry_string + "\n";
+    }
+
+    void flush_text_entry() {
+        text_entry_string.clear();
+		buffer.cursor.set_x(0);
+    }
+
+    void add_entry_to_history() {
+        history.push_back(text_entry_string);
+        flush_text_entry();
+    }
+
+    CommandResponse run_cmd() {
+		std::istringstream ss(text_entry_string);
     	
 		std::string word;
 		std::vector<std::string> cmd;
@@ -48,8 +67,8 @@ public:
 			tt = TargetType::T_DIRECTORY;
 		}
 		else {
-			report_error("no target type");
-			return;
+			CommandResponse err_res{"error: no target type", true};
+            return err_res;
 		}
 
 		std::map<std::string, Command*> cmd_map;
@@ -58,10 +77,13 @@ public:
     	cmd_map["close"]  = new CloseCommand (tt, cmd[2]);
 
 		if (cmd_map.count(cmd[0]) > 0) {
-			CommandResponse success = cmd_map[cmd[0]]->execute();
-		} else {
-			report_error("invalid command");
+			CommandResponse res = cmd_map[cmd[0]]->execute();
+            print_text_entry();     // COMMENT: while developing
+            add_entry_to_history();
+            return res;
 		}
+        CommandResponse err_res{"error: invalid command", true};
+        return err_res;
 	}
 };
 
