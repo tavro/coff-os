@@ -73,8 +73,8 @@ public:
 
 		std::map<std::string, Command*> cmd_map;
     	cmd_map["create"] = new CreateCommand(tt, cmd[2], standing_dir);
-    	cmd_map["open"]   = new OpenCommand  (tt, cmd[2]);
-    	cmd_map["close"]  = new CloseCommand (tt, cmd[2]);
+    	cmd_map["open"]   = new OpenCommand  (tt, cmd[2], standing_dir);
+    	cmd_map["close"]  = new CloseCommand (tt, cmd[2], standing_dir);
 
 		if (cmd_map.count(cmd[0]) > 0) {
 			CommandResponse res = cmd_map[cmd[0]]->execute();

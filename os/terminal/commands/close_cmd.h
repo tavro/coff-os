@@ -2,7 +2,7 @@
 
 class CloseCommand : public Command {
 public:
-    CloseCommand(TargetType tt, std::string n) : Command(tt, n) {}
+    CloseCommand(TargetType tt, std::string n, std::string d) : Command(tt, n) {}
     CommandResponse execute() override {
         switch(target_type) {
             case TargetType::T_FILE:

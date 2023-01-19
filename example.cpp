@@ -67,6 +67,25 @@ private:
         }
     }
 
+	bool check_if_dir_exists(string dir) {
+		for(Directory* d : directories) {
+			//TODO: Check if directory exists
+		}
+		return false;
+	}
+
+	// This is a temporary function, that will be removed when stuff is stored
+	// in the actual hardware memory
+	void handle_message(string msg) {
+		std::string action = msg.substr(0, msg.find(':'));
+        std::string rest = msg.substr(msg.find(':')+1, msg.size()-1);
+		if(action == "open") {
+			if(check_if_dir_exists(rest)) {
+				current_dir = rest;
+			}
+		}
+	}
+
 	void handle_response(CommandResponse cr) {
 		switch(cr.get_response_type()) {
 			case ResponseType::FILE_RESPONSE:
@@ -76,6 +95,8 @@ private:
 				directories.push_back(cr.get_dir());
 				break;
 			case ResponseType::MSG_RESPONSE:
+				handle_message(cr.get_msg());
+				break;
 			case ResponseType::ERR_RESPONSE:
 				cout << cr.get_msg() << endl;
 				break;
@@ -116,10 +137,10 @@ private:
 
 public:
 	bool on_create() override {
-		Directory* dir = new Directory("folder", "/");
+		Directory* dir = new Directory("home", "/");
 		directories.push_back(dir);
 
-		File* file = new File("text_file", "txt");
+		File* file = new File("README", "txt");
 		files.push_back(file);
 
 		editor = new Editor(file);
